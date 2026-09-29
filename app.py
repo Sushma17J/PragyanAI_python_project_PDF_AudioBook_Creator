@@ -7,6 +7,7 @@ import tempfile
 import os
 
 from gtts import gTTS
+from langdetect import detect
 
 
 # ============================================================
@@ -27,12 +28,12 @@ st.set_page_config(
 st.title("🔊 PDF2Voice")
 
 st.markdown(
-    "### Convert PDF text into a single audio file"
+    "### Convert PDF Text into a Single Audio File"
 )
 
 st.write(
-    "Upload a PDF, generate audio from the first "
-    "3000 characters, and download the final audio."
+    "Upload a PDF, generate speech from three consecutive "
+    "1000-character sections, and download the combined audio."
 )
 
 
@@ -43,21 +44,20 @@ st.write(
 if "pdf_file" not in st.session_state:
     st.session_state.pdf_file = None
 
-if "audio_path" not in st.session_state:
-    st.session_state.audio_path = None
-
 if "audio_bytes" not in st.session_state:
     st.session_state.audio_bytes = None
 
+if "language" not in st.session_state:
+    st.session_state.language = None
+
 
 # ============================================================
-# UPLOAD PDF
+# PDF UPLOAD
 # ============================================================
 
 uploaded_file = st.file_uploader(
-    "Select your PDF",
-    type=["pdf"],
-    label_visibility="collapsed"
+    "📄 Upload PDF",
+    type=["pdf"]
 )
 
 
@@ -66,19 +66,36 @@ if uploaded_file is not None:
     st.session_state.pdf_file = uploaded_file
 
     st.success(
-        f"✅ PDF uploaded: {uploaded_file.name}"
+        f"✅ Uploaded: {uploaded_file.name}"
     )
 
 
 # ============================================================
-# BUTTONS
+# BUTTON LAYOUT
 # ============================================================
 
 col1, col2, col3 = st.columns(3)
 
 
 # ============================================================
-# GENERATE AUDIO
+# UPLOAD BUTTON AREA
+# ============================================================
+
+with col1:
+
+    st.write("📄 PDF Upload")
+
+    if uploaded_file is not None:
+
+        st.success("Uploaded")
+
+    else:
+
+        st.info("Choose a PDF above")
+
+
+# ============================================================
+# GENERATE AUDIO BUTTON
 # ============================================================
 
 with col2:
@@ -90,7 +107,7 @@ with col2:
 
 
 # ============================================================
-# GENERATE AUDIO PROCESS
+# GENERATE AUDIO
 # ============================================================
 
 if generate_clicked:
@@ -102,10 +119,6 @@ if generate_clicked:
         )
 
     else:
-
-        # ----------------------------------------------------
-        # Popup Dialog
-        # ----------------------------------------------------
 
         @st.dialog("🎙️ Generate Audio")
         def generate_audio_dialog():
@@ -121,14 +134,12 @@ if generate_clicked:
             try:
 
                 # =================================================
-                # STEP 1 - READ PDF
+                # STEP 1: SAVE TEMPORARY PDF
                 # =================================================
 
                 status_text.write(
-                    "📄 Extracting text from PDF..."
+                    "📄 Reading PDF..."
                 )
-
-                progress.progress(20)
 
                 pdf_bytes = (
                     st.session_state.pdf_file
@@ -145,9 +156,16 @@ if generate_clicked:
                     pdf_path = temp_pdf.name
 
 
+                progress.progress(10)
+
+
                 # =================================================
-                # STEP 2 - EXTRACT TEXT
+                # STEP 2: EXTRACT PDF TEXT
                 # =================================================
+
+                status_text.write(
+                    "📖 Extracting text from PDF..."
+                )
 
                 with open(
                     pdf_path,
@@ -173,10 +191,11 @@ if generate_clicked:
 
                 full_text = full_text.strip()
 
+
                 if not full_text:
 
                     st.error(
-                        "❌ No readable text found."
+                        "❌ No readable text found in the PDF."
                     )
 
                     os.remove(pdf_path)
@@ -184,11 +203,48 @@ if generate_clicked:
                     return
 
 
-                progress.progress(40)
+                progress.progress(30)
+
 
                 # =================================================
-                # STEP 3 - FIRST 3000 CHARACTERS
+                # STEP 3: LANGUAGE DETECTION
                 # =================================================
+
+                status_text.write(
+                    "🌐 Detecting language..."
+                )
+
+                try:
+
+                    detected_language = detect(
+                        full_text[:1000]
+                    )
+
+                    st.session_state.language = (
+                        detected_language
+                    )
+
+                except Exception:
+
+                    detected_language = "en"
+
+
+                st.info(
+                    f"🌐 Detected Language: "
+                    f"`{detected_language}`"
+                )
+
+
+                progress.progress(40)
+
+
+                # =================================================
+                # STEP 4: SELECT 3 × 1000 CHARACTERS
+                # =================================================
+
+                status_text.write(
+                    "✂️ Dividing text into sections..."
+                )
 
                 part1 = full_text[0:1000]
 
@@ -197,16 +253,12 @@ if generate_clicked:
                 part3 = full_text[2000:3000]
 
 
-                status_text.write(
-                    "✂️ Dividing text into three sections..."
-                )
+                progress.progress(45)
 
 
                 # =================================================
-                # STEP 4 - TEXT TO SPEECH
+                # STEP 5: CREATE AUDIO FILES
                 # =================================================
-
-                progress.progress(50)
 
                 status_text.write(
                     "🔊 Converting text to speech..."
@@ -230,50 +282,78 @@ if generate_clicked:
                 )
 
 
-                gTTS(
-                    text=part1,
-                    lang="en",
-                    slow=False
-                ).save(audio1_path)
+                # -------------------------------------------------
+                # Part 1
+                # -------------------------------------------------
+
+                if part1:
+
+                    gTTS(
+                        text=part1,
+                        lang=detected_language,
+                        slow=False
+                    ).save(audio1_path)
+
+                else:
+
+                    return
 
 
-                progress.progress(60)
+                progress.progress(55)
 
 
-                gTTS(
-                    text=part2,
-                    lang="en",
-                    slow=False
-                ).save(audio2_path)
+                # -------------------------------------------------
+                # Part 2
+                # -------------------------------------------------
+
+                if part2:
+
+                    gTTS(
+                        text=part2,
+                        lang=detected_language,
+                        slow=False
+                    ).save(audio2_path)
+
+
+                progress.progress(65)
+
+
+                # -------------------------------------------------
+                # Part 3
+                # -------------------------------------------------
+
+                if part3:
+
+                    gTTS(
+                        text=part3,
+                        lang=detected_language,
+                        slow=False
+                    ).save(audio3_path)
 
 
                 progress.progress(70)
 
 
-                gTTS(
-                    text=part3,
-                    lang="en",
-                    slow=False
-                ).save(audio3_path)
-
-
                 # =================================================
-                # STEP 5 - LOAD AUDIO USING LIBROSA
+                # STEP 6: LOAD AUDIO USING LIBROSA
                 # =================================================
 
                 status_text.write(
-                    "🎵 Processing audio with Librosa..."
+                    "🎵 Processing audio using Librosa..."
                 )
+
 
                 audio1, sr1 = librosa.load(
                     audio1_path,
                     sr=None
                 )
 
+
                 audio2, sr2 = librosa.load(
                     audio2_path,
                     sr=None
                 )
+
 
                 audio3, sr3 = librosa.load(
                     audio3_path,
@@ -282,7 +362,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 6 - SAME SAMPLE RATE
+                # STEP 7: MATCH SAMPLE RATES
                 # =================================================
 
                 if sr2 != sr1:
@@ -307,12 +387,13 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 7 - MERGE AUDIO
+                # STEP 8: COMBINE AUDIO
                 # =================================================
 
                 status_text.write(
                     "🔗 Combining all three audio sections..."
                 )
+
 
                 final_audio = np.concatenate(
                     [
@@ -324,7 +405,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 8 - SAVE FINAL AUDIO
+                # STEP 9: SAVE FINAL AUDIO
                 # =================================================
 
                 output_path = os.path.join(
@@ -342,13 +423,9 @@ if generate_clicked:
 
                 progress.progress(100)
 
-                status_text.write(
-                    "✅ Audio generated successfully!"
-                )
-
 
                 # =================================================
-                # STORE AUDIO
+                # STEP 10: READ AUDIO
                 # =================================================
 
                 with open(
@@ -361,34 +438,55 @@ if generate_clicked:
                     )
 
 
-                st.session_state.audio_path = (
-                    output_path
-                )
-
-
                 # =================================================
                 # RESULT
                 # =================================================
+
+                status_text.write(
+                    "✅ Audio generated successfully!"
+                )
 
                 st.success(
                     "🎉 Your audio is ready!"
                 )
 
-                st.info(
-                    "The audio contains three consecutive "
-                    "1000-character sections."
+                st.write(
+                    f"🌐 Language: `{detected_language}`"
                 )
+
+                st.write(
+                    f"📄 Section 1: {len(part1)} characters"
+                )
+
+                st.write(
+                    f"📄 Section 2: {len(part2)} characters"
+                )
+
+                st.write(
+                    f"📄 Section 3: {len(part3)} characters"
+                )
+
+
+                # Audio player inside popup
 
                 st.audio(
                     st.session_state.audio_bytes,
                     format="audio/wav"
                 )
 
-                st.session_state.audio_generated = True
 
+                # Cleanup
 
-                # Cleanup PDF
                 os.remove(pdf_path)
+
+                if os.path.exists(audio1_path):
+                    os.remove(audio1_path)
+
+                if os.path.exists(audio2_path):
+                    os.remove(audio2_path)
+
+                if os.path.exists(audio3_path):
+                    os.remove(audio3_path)
 
 
             except Exception as e:
@@ -402,7 +500,7 @@ if generate_clicked:
 
 
 # ============================================================
-# DOWNLOAD AUDIO
+# DOWNLOAD BUTTON
 # ============================================================
 
 with col3:
