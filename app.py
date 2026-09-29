@@ -22,18 +22,46 @@ st.set_page_config(
 
 
 # ============================================================
+# CUSTOM CSS
+# ============================================================
+
+st.markdown(
+    """
+    <style>
+
+    .main-title {
+        text-align: center;
+        font-size: 42px;
+        font-weight: bold;
+        margin-bottom: 5px;
+    }
+
+    .subtitle {
+        text-align: center;
+        font-size: 18px;
+        margin-bottom: 30px;
+    }
+
+    </style>
+    """,
+    unsafe_allow_html=True
+)
+
+
+# ============================================================
 # TITLE
 # ============================================================
 
-st.title("🔊 PDF2Voice")
-
 st.markdown(
-    "### Convert PDF Text into a Single Audio File"
+    '<div class="main-title">🔊 PDF2Voice</div>',
+    unsafe_allow_html=True
 )
 
-st.write(
-    "Upload a PDF, generate speech from three consecutive "
-    "1000-character sections, and download the combined audio."
+st.markdown(
+    '<div class="subtitle">'
+    'Convert PDF text into a single audio file'
+    '</div>',
+    unsafe_allow_html=True
 )
 
 
@@ -56,7 +84,7 @@ if "language" not in st.session_state:
 # ============================================================
 
 uploaded_file = st.file_uploader(
-    "📄 Upload PDF",
+    "📄 PDF Upload",
     type=["pdf"]
 )
 
@@ -78,24 +106,22 @@ col1, col2, col3 = st.columns(3)
 
 
 # ============================================================
-# UPLOAD BUTTON AREA
+# COLUMN 1
 # ============================================================
 
 with col1:
 
-    st.write("📄 PDF Upload")
-
     if uploaded_file is not None:
 
-        st.success("Uploaded")
+        st.write("📄 PDF Ready")
 
     else:
 
-        st.info("Choose a PDF above")
+        st.write("📄 Upload PDF")
 
 
 # ============================================================
-# GENERATE AUDIO BUTTON
+# COLUMN 2 - GENERATE AUDIO
 # ============================================================
 
 with col2:
@@ -124,7 +150,7 @@ if generate_clicked:
         def generate_audio_dialog():
 
             st.write(
-                "Your PDF is being processed..."
+                "Processing your PDF..."
             )
 
             progress = st.progress(0)
@@ -134,7 +160,7 @@ if generate_clicked:
             try:
 
                 # =================================================
-                # STEP 1: SAVE TEMPORARY PDF
+                # STEP 1 - READ PDF
                 # =================================================
 
                 status_text.write(
@@ -160,7 +186,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 2: EXTRACT PDF TEXT
+                # STEP 2 - EXTRACT TEXT
                 # =================================================
 
                 status_text.write(
@@ -207,7 +233,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 3: LANGUAGE DETECTION
+                # STEP 3 - LANGUAGE DETECTION
                 # =================================================
 
                 status_text.write(
@@ -220,13 +246,14 @@ if generate_clicked:
                         full_text[:1000]
                     )
 
-                    st.session_state.language = (
-                        detected_language
-                    )
-
                 except Exception:
 
                     detected_language = "en"
+
+
+                st.session_state.language = (
+                    detected_language
+                )
 
 
                 st.info(
@@ -239,7 +266,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 4: SELECT 3 × 1000 CHARACTERS
+                # STEP 4 - SPLIT TEXT
                 # =================================================
 
                 status_text.write(
@@ -253,16 +280,25 @@ if generate_clicked:
                 part3 = full_text[2000:3000]
 
 
+                # Check whether the PDF has enough text
+
+                if not part1:
+
+                    st.error(
+                        "❌ PDF does not contain readable text."
+                    )
+
+                    os.remove(pdf_path)
+
+                    return
+
+
                 progress.progress(45)
 
 
                 # =================================================
-                # STEP 5: CREATE AUDIO FILES
+                # STEP 5 - TEMPORARY AUDIO FILES
                 # =================================================
-
-                status_text.write(
-                    "🔊 Converting text to speech..."
-                )
 
                 temp_dir = tempfile.gettempdir()
 
@@ -282,29 +318,30 @@ if generate_clicked:
                 )
 
 
-                # -------------------------------------------------
+                # =================================================
+                # STEP 6 - TEXT TO SPEECH
+                # =================================================
+
+                status_text.write(
+                    "🔊 Converting text to speech..."
+                )
+
+
                 # Part 1
-                # -------------------------------------------------
 
-                if part1:
-
-                    gTTS(
-                        text=part1,
-                        lang=detected_language,
-                        slow=False
-                    ).save(audio1_path)
-
-                else:
-
-                    return
+                gTTS(
+                    text=part1,
+                    lang=detected_language,
+                    slow=False
+                ).save(
+                    audio1_path
+                )
 
 
                 progress.progress(55)
 
 
-                # -------------------------------------------------
                 # Part 2
-                # -------------------------------------------------
 
                 if part2:
 
@@ -312,15 +349,20 @@ if generate_clicked:
                         text=part2,
                         lang=detected_language,
                         slow=False
-                    ).save(audio2_path)
+                    ).save(
+                        audio2_path
+                    )
+
+                else:
+
+                    # Create silent audio if part 2 doesn't exist
+                    audio2_path = None
 
 
                 progress.progress(65)
 
 
-                # -------------------------------------------------
                 # Part 3
-                # -------------------------------------------------
 
                 if part3:
 
@@ -328,18 +370,24 @@ if generate_clicked:
                         text=part3,
                         lang=detected_language,
                         slow=False
-                    ).save(audio3_path)
+                    ).save(
+                        audio3_path
+                    )
+
+                else:
+
+                    audio3_path = None
 
 
                 progress.progress(70)
 
 
                 # =================================================
-                # STEP 6: LOAD AUDIO USING LIBROSA
+                # STEP 7 - LOAD AUDIO USING LIBROSA
                 # =================================================
 
                 status_text.write(
-                    "🎵 Processing audio using Librosa..."
+                    "🎵 Processing audio with Librosa..."
                 )
 
 
@@ -349,37 +397,52 @@ if generate_clicked:
                 )
 
 
-                audio2, sr2 = librosa.load(
-                    audio2_path,
-                    sr=None
-                )
+                audio_parts = [
+                    audio1
+                ]
 
 
-                audio3, sr3 = librosa.load(
-                    audio3_path,
-                    sr=None
-                )
+                # Part 2
 
+                if audio2_path is not None:
 
-                # =================================================
-                # STEP 7: MATCH SAMPLE RATES
-                # =================================================
+                    audio2, sr2 = librosa.load(
+                        audio2_path,
+                        sr=None
+                    )
 
-                if sr2 != sr1:
+                    if sr2 != sr1:
 
-                    audio2 = librosa.resample(
-                        audio2,
-                        orig_sr=sr2,
-                        target_sr=sr1
+                        audio2 = librosa.resample(
+                            audio2,
+                            orig_sr=sr2,
+                            target_sr=sr1
+                        )
+
+                    audio_parts.append(
+                        audio2
                     )
 
 
-                if sr3 != sr1:
+                # Part 3
 
-                    audio3 = librosa.resample(
-                        audio3,
-                        orig_sr=sr3,
-                        target_sr=sr1
+                if audio3_path is not None:
+
+                    audio3, sr3 = librosa.load(
+                        audio3_path,
+                        sr=None
+                    )
+
+                    if sr3 != sr1:
+
+                        audio3 = librosa.resample(
+                            audio3,
+                            orig_sr=sr3,
+                            target_sr=sr1
+                        )
+
+                    audio_parts.append(
+                        audio3
                     )
 
 
@@ -387,25 +450,21 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 8: COMBINE AUDIO
+                # STEP 8 - COMBINE AUDIO
                 # =================================================
 
                 status_text.write(
-                    "🔗 Combining all three audio sections..."
+                    "🔗 Combining audio sections..."
                 )
 
 
                 final_audio = np.concatenate(
-                    [
-                        audio1,
-                        audio2,
-                        audio3
-                    ]
+                    audio_parts
                 )
 
 
                 # =================================================
-                # STEP 9: SAVE FINAL AUDIO
+                # STEP 9 - SAVE FINAL AUDIO
                 # =================================================
 
                 output_path = os.path.join(
@@ -425,7 +484,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # STEP 10: READ AUDIO
+                # STEP 10 - READ AUDIO
                 # =================================================
 
                 with open(
@@ -439,7 +498,7 @@ if generate_clicked:
 
 
                 # =================================================
-                # RESULT
+                # SUCCESS
                 # =================================================
 
                 status_text.write(
@@ -449,6 +508,11 @@ if generate_clicked:
                 st.success(
                     "🎉 Your audio is ready!"
                 )
+
+
+                # =================================================
+                # INFORMATION
+                # =================================================
 
                 st.write(
                     f"🌐 Language: `{detected_language}`"
@@ -467,7 +531,9 @@ if generate_clicked:
                 )
 
 
-                # Audio player inside popup
+                # =================================================
+                # AUDIO PLAYER
+                # =================================================
 
                 st.audio(
                     st.session_state.audio_bytes,
@@ -475,17 +541,30 @@ if generate_clicked:
                 )
 
 
-                # Cleanup
+                # =================================================
+                # CLEANUP
+                # =================================================
 
-                os.remove(pdf_path)
+                if os.path.exists(pdf_path):
+
+                    os.remove(pdf_path)
 
                 if os.path.exists(audio1_path):
+
                     os.remove(audio1_path)
 
-                if os.path.exists(audio2_path):
+                if (
+                    audio2_path is not None
+                    and os.path.exists(audio2_path)
+                ):
+
                     os.remove(audio2_path)
 
-                if os.path.exists(audio3_path):
+                if (
+                    audio3_path is not None
+                    and os.path.exists(audio3_path)
+                ):
+
                     os.remove(audio3_path)
 
 
@@ -500,7 +579,7 @@ if generate_clicked:
 
 
 # ============================================================
-# DOWNLOAD BUTTON
+# COLUMN 3 - DOWNLOAD
 # ============================================================
 
 with col3:
